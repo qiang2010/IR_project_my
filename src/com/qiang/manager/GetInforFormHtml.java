@@ -24,8 +24,8 @@ public class GetInforFormHtml {
 	int type;            // 标记该HTML信息来源是哪个网站
 	String title;  		// 标题
 	Timestamp   timeStamp; 	// 发布时间
-	int    comments;    // 评论数目
-	int    jointPeople; //参与人数
+	int    comments = -1;    // 评论数目
+	int    jointPeople = -1; //参与人数
 	String body;      	// 新闻内容主题
 	String body_40Words;
 	String description; // 元数据中的
@@ -151,6 +151,63 @@ public class GetInforFormHtml {
 		checkIfValid();
 	}
 	
+	public void getAllInfoWangYi163(String content) {	
+		document =Jsoup.parse(content);
+		title = document.title();		// title
+		print(title);
+//		Elements links = document.getElementsByTag("link");
+//		System.out.println(links.size());
+//		for(Element link: links){
+//			System.out.println(link.attr("href"));
+//		}
+//		 url   = links.get(0).attr("href");	//url html中所有连接的第一个应该是本网页自己的链接
+		 Elements metas = document.getElementsByTag("meta");  // 元数据
+		 description = metas.get(3).attr("content");  // 元数据中的描述
+		 keywords =    metas.get(2).attr("content");   // 元数据中的keywords
+		// url     = metas.get(7).attr("content");
+		 print(description);
+		 print(keywords);
+		 //print(url);
+		//  新闻正文在id为endText的div中，所以先获取该div在获取div中的p
+		Element contentText = document.getElementById("endText");	
+	    Elements ps = contentText.getElementsByTag("p");
+	    body = "";  //  body
+		for(Element p:ps){
+			 body+= p.text().trim(); // 去除其他空白字符
+	    }
+		print(body);
+		// time 
+		
+		Elements times = document.getElementsByAttributeValue("class", "ep-time-soure cDGray");
+//		if (time == null){ 
+//		  times = document.getElementsByAttributeValue("itemprop", "datePublished");//
+//		  //System.out.println(times.size());
+//		  time = times.get(0);
+//		}
+		Element time = times.get(0);
+		SimpleDateFormat simpleTimeFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+		String tt = time.text().trim();
+		String []fields = tt.split("\\s{1,}");
+		System.out.println(tt);  // 2013-12-20T06:30:00+08:00
+//		String day = time.attr("content");
+//		String second ;
+//		String []hours =  day.split("T");
+//		day = hours[0].trim();
+//		 second = hours[1].trim();
+//		String last = day+" "+second.substring(0, 8);
+		try {
+			date = simpleTimeFormat.parse(fields[0]+" "+fields[1]);
+		} catch (ParseException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	    timeStamp = new Timestamp(date.getTime());  // unix timestamp
+	    print(timeStamp.toString());
+		//Data d = new DataTime(time.attr("content"));
+		//System.out.println(document.title());
+		 
+		checkIfValid();
+	}
 	
 	// 分析腾讯体育的数据
 	public void getAllInfoTencent(String content){
