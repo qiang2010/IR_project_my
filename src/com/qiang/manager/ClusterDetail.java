@@ -11,6 +11,14 @@ public class ClusterDetail {
 	
 	String title;
 	int clusterSize;
+    double score = 0;
+	@Override
+	public String toString() {
+		return "ClusterDetail [title=" + title + ", clusterSize=" + clusterSize
+				+ ", score=" + score + ", clusterCenterSize=" + clusterCenter.size() +", centerDoc=" + centerDoc + ", simSum="
+				+ simSum +  ", docList="
+				+ docList + "]";  // ", clusterCenter=" + clusterCenter +
+ 	}
 	int centerDoc ; // 距离质心最近的文档
 	double simSum = 0; // 用于存放簇内相似度之和， 可以节省计算
 	HashMap<Integer, Double> clusterCenter = new HashMap<Integer, Double>();

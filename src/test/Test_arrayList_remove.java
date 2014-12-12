@@ -17,7 +17,7 @@ public class Test_arrayList_remove {
 		a.add(7);
 		a.add(9);
 		a.remove(1);
-		System.out.println(a);
+		System.out.println(a+ " "+ a.get(2));
 		
 	}
 }

@@ -2,7 +2,6 @@ package com.qiang.manager;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
-import java.io.UnsupportedEncodingException;
 import java.sql.Timestamp;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;

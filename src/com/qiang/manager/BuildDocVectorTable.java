@@ -165,7 +165,7 @@ import java.util.Set;
             			df = rs2.getInt(2);
                 		tf = rs.getInt(2);
                 		tfidf = (1+Math.log((double)tf))*(Math.log(DocNum/df));
-                		if(tfidf > MIN_tfidf)
+                		if(tfidf > MIN_tfidf) 
                 			vector.put(termId,tfidf);	
             		}      		
             	}
@@ -181,6 +181,8 @@ import java.util.Set;
 			System.out.println("ok");
             conn.close(); 
 	}
+	// 2014 12 12 构建词汇表改版
+	
 	public static void insertTermID() throws ClassNotFoundException, SQLException{
 		Connection conn = null;
         String url = "jdbc:mysql://localhost:3306/ir_project?"+"user=root&password=qiang&useUnicode=true&characterEncoding=UTF8";
