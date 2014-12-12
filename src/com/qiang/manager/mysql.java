@@ -39,16 +39,16 @@ public class mysql {
             conn = DriverManager.getConnection(url);
             System.out.println("连接成功");
             int id = 0;
-            int r1 =49000, r2 = 50000;
-            int tableSize = 60000;
+            int r1 =0, r2 = 1000;
+            int tableSize = 101000;
             Statement stmt;
             ResultSet rs;
-            String update_sql  = "update htmls set url = ? ,hot = ? where id = ?";
+            String update_sql  = "update htmls set time= ? where id = ?";
             PreparedStatement pstmt = conn.prepareStatement(update_sql);
             int newHot=-1;
             Random rand = new Random();
             while(r2<tableSize){
-            	 sql = "select id,url,hot from htmls where id <=" + r2 +" && id >" + r1;
+            	 sql = "select id,url from htmls where id <=" + r2 +" && id >" + r1;
             	 stmt = conn.createStatement();
             	 rs = stmt.executeQuery(sql);
             	 String urlF="";
