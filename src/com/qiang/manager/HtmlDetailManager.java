@@ -17,7 +17,7 @@ import com.qiang.bean.Htmls;
 
 public class HtmlDetailManager {
 
-	final static  int  SOHU = 1;
+	final static  int SOHU = 1;
 	final static  int  SINA  = 2;
 	final static  int  WanyYi  = 3;
 	final static  int  Tencent  = 4;

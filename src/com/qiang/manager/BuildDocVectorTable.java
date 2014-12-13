@@ -11,7 +11,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.PriorityQueue;
 import java.util.Set;
 
@@ -24,165 +26,233 @@ import java.util.Set;
 	 *   INSERT into termidTest(term,df) (SELECT term,count(document_id) FROM bodyterm GROUP BY term)
 	 */
 	public static void main(String[] args) throws Exception{
-		// TODO Auto-generated method stub
-		// 构建词项表 id term
-		//insertTermID();
 		
-		//buildDocVector();
-		// 构建 文档向量 表
-//		BuildDocVectorTable build = new BuildDocVectorTable();
-//		ArrayList<Integer> doclist = new ArrayList<Integer>();
-//		doclist.add(2);
-//		doclist.add(3);
-//		doclist.add(47);
-        //build.cluster(doclist);
+		BuildDocVectorTable build = new BuildDocVectorTable();
+		long start = System.currentTimeMillis();
+		build.getTerm_and_df();
+		build.get_bodyTerm();
+		build.writeVectorIntoDatabase();
+		long end = System.currentTimeMillis();
+		System.out.println("花费时间：" + (end-start)/60000.0 + " min");
 		
 	}
 
-	// 给定向量进行归一化操作
-	public static HashMap<Integer, Double> normalize(HashMap<Integer, Double> vector){
-		if(vector == null) return null;
-		double length=0;
-		Set<Integer> keyS = vector.keySet();
-		Iterator<Integer> it = keyS.iterator();
-		int k;
-		while(it.hasNext()){
-			k = it.next();
-			length += Math.pow(vector.get(k),2);
-		}
-		length = Math.sqrt(length);
-		it = keyS.iterator();
-		//double test=0;
-		while(it.hasNext()){
-			k = it.next();
-			vector.put(k,vector.get(k)/length);
-			//test += Math.pow(vector.get(k),2);
-		}
-		//System.out.println(test);
-		return vector;
+	// 遍历一遍bodyterm，map用文档id作为key，值是一个map，是其向量
+	HashMap<Integer,HashMap<Integer,Double>> bigVectorMap = new HashMap<Integer,HashMap<Integer,Double>> ();
+	public  void get_bodyTerm() throws SQLException{
+		Connection con = ConnectionUtil.getConnection();
+//		con.setAutoCommit(false); 
+		Statement stmt = con.createStatement();
+		
+		//part1-------------将bodyterm读入内存
+		
+		System.out.println("开始将bodyterm读入内存！");
+		int DocNum = 110000; // 文档总数目
+		int termSum = 13848493; // 13848493
+		for(long row=0; row<= termSum; row+=200000){
+			System.out.println(row);
+			String all_terms_sql = "select term,document_id,tf from bodyterm limit "+row+",200000";
+//			select * from bodyterm limit 100000,100000
+			ResultSet all_terms_rs = stmt.executeQuery(all_terms_sql);
+			int df;
+			int tf;
+			int termId;
+			int docId;
+			termInfo termIn;
+			HashMap<Integer,Double> docID_tfidf;
+			while(all_terms_rs.next()){
+				 String term = all_terms_rs.getString(1);
+				 docId = all_terms_rs.getInt(2);
+				 termIn = allTerm_and_df.get(term); // 将词项 转换成id
+				 termId = termIn.id;
+				 df = termIn.df;
+				 tf = all_terms_rs.getInt(3);
+				 docID_tfidf = bigVectorMap.get(docId);
+				 double tfidf = (1+Math.log((double)tf))*(Math.log(DocNum/df)); 
+				 if(tfidf < MIN_tfidf) continue;
+				 if(docID_tfidf == null){
+					 docID_tfidf =new  HashMap<Integer,Double>();
+					 docID_tfidf.put(termId, tfidf);
+					 bigVectorMap.put(docId, docID_tfidf);				
+				}else{
+					 docID_tfidf.put(termId, tfidf);
+					 bigVectorMap.put(docId, docID_tfidf);
+				}
+			}
+			all_terms_rs.close();	
+		}//end-for
+		System.out.println("向量空间大小 ："+bigVectorMap.size());
+		//System.out.println("bodyterm成功读入内存！");
 	}
 	
-//	// 从数据库中读取所有的 需要文档的 向量
-//	public static boolean getAllVectors(ArrayList<Integer> doclist) throws ClassNotFoundException, SQLException{
-//		if(vectors !=null) vectors.clear();
+	// 获取termid表中的信息
+	class termInfo{
+		public termInfo(int id,int df) {
+			// TODO Auto-generated constructor stub
+			this.id = id;
+			this.df = df;
+		}
+		int id;
+		int df;
+	}
+	public void writeVectorIntoDatabase() throws SQLException{
+		  Connection conn = ConnectionUtil.getConnection();
+	      String insertSql = "insert into docVector values(?,?,?)";
+	      //PreparedStatement pstmt = conn.prepareStatement(docIdSql);
+	      PreparedStatement pstmt = conn.prepareStatement(insertSql);
+	      Set<Integer> keyset = bigVectorMap.keySet();
+	      Iterator<Integer> it = keyset.iterator();
+	      HashMap<Integer, Double>  temp;
+	      conn.setAutoCommit(false);  // 不自动提交
+	      int key;
+	      int count=0;
+	      while(it.hasNext()){
+	    	  count++;
+	    	  key = it.next();
+	    	  System.out.println(key);
+	    	  temp = bigVectorMap.get(key);
+	    	  pstmt.setInt(1, key);
+	    	  pstmt.setInt(2, temp.size());	    	  
+	    	  pstmt.setObject(3, normalize(temp));
+	    	  //pstmt.execute();
+	    	  pstmt.addBatch();
+	    	  if(count %1000 == 0){
+	    		  pstmt.executeBatch();
+	    		  conn.commit();
+	    		  pstmt.clearBatch();
+	    	  }
+	    		  
+	    	  //
+	      }
+	      pstmt.executeBatch();
+		  conn.commit();
+	      conn.close();
+		
+	}
+	
+	// 将词项表中的所有信息读入到内存中， term id df
+	HashMap<String,termInfo> allTerm_and_df = new HashMap<String,termInfo>();
+	public  void getTerm_and_df() throws SQLException{
+		if(allTerm_and_df !=null) allTerm_and_df.clear();
+		else {
+			allTerm_and_df = new HashMap<String,termInfo>();
+		}
+		Connection conn = ConnectionUtil.getConnection();
+		System.out.println("开始将term读入内存！");
+		Statement stmt = conn.createStatement();
+		String sql = "select termid,term,df from termid";
+		ResultSet rs =  stmt.executeQuery(sql);
+		
+		while(rs.next()){
+			allTerm_and_df.put(rs.getString(2),new termInfo(rs.getInt(1), rs.getInt(3)));
+		}
+		System.out.println("term读入内存 ok！");
+		System.out.println("term num" + allTerm_and_df.size());
+		
+		
+		conn.close();
+	}
+//	//  向向量空间表格中插入 文档 对应的 向量
+//	public static void buildDocVector() throws ClassNotFoundException, SQLException{
 //		Connection conn = null;
-//        String url = "jdbc:mysql://localhost:3306/ir_project?"+"user=root&password=qiang&useUnicode=true&characterEncoding=UTF8";
-//        Class.forName("com.mysql.jdbc.Driver");// 动态加载mysql驱动
-//        System.out.println("成功加载MySQL驱动程序");
-//        conn = DriverManager.getConnection(url);
-//        System.out.println("连接成功");
-//        String sqlBase = "select vector from docVector where docid =";
-//        String sql ;
-//        Statement stmt = conn.createStatement();
-//        ResultSet rs;
-//        int size = doclist.size();
-//        int docId;
-//        HashMap<Integer, Double> vec;
-//        for(int i = 0;i<size;i++){
-//        	docId = doclist.get(i);
-//        	sql = sqlBase + docId;
-//        	rs = stmt.executeQuery(sql);
-//        	if(rs.next()){
-////        		vec = new  HashMap<Integer, Double>();
-//        		Blob blob = (Blob) rs.getBlob("Vector");
-//				ObjectInputStream objinput;
-//				try {
-//					objinput = new ObjectInputStream(blob.getBinaryStream());
-//					vec= (HashMap<Integer, Double>) objinput.readObject();	
-//					System.out.println(vec);
-//					vectors.put(docId, normalize(vec)); // 归一化
-//					objinput.close();
-//				} catch (IOException e) {
-//					// TODO Auto-generated catch block
-//					e.printStackTrace();
-//				}		
-//        	}
-//        }
-//        conn.close(); 
-//		return true;
+//        String sql;
+//        // MySQL的JDBC URL编写方式：jdbc:mysql://主机名称：连接端口/数据库的名称?参数=值
+//        // 避免中文乱码要指定useUnicode和characterEncoding
+//        // 执行数据库操作之前要在数据库管理系统上创建一个数据库，名字自己定，
+//        // 下面语句之前就要先创建javademo数据库
+// 
+//        
+//            // 之所以要使用下面这条语句，是因为要使用MySQL的驱动，所以我们要把它驱动起来，
+//            // 可以通过Class.forName把它加载进去，也可以通过初始化来驱动起来，下面三种形式都可以
+//            Class.forName("com.mysql.jdbc.Driver") ;// 动态加载mysql驱动
+// 
+//            System.out.println("成功加载MySQL驱动程序");
+//            conn = DriverManager.getConnection(url);
+//            conn.setAutoCommit(false);  // 不自动提交
+//            System.out.println("连接成功");
+//            Statement stmt = conn.createStatement();
+//            Statement stmt2 = conn.createStatement();
+//            ResultSet rs;
+//            // 首先获取文档id的范围 
+//            ArrayList<Integer> docId = new ArrayList<Integer>();
+//            String docIdSql = "select distinct document_id  from bodyterm ";
+//            rs = stmt.executeQuery(docIdSql);
+//            while(rs.next()){
+//            	docId.add(rs.getInt(1)); // 获取所有的文档id
+//            }
+//            int DocNum = docId.size();  // 这里就是文档数量 N (1+Math.log((double)tf))*(Math.log(N/df));
+//            
+//            // 这里 先直接使用term，不转换为相应的id
+//            HashMap<Integer, Double> vector  = new HashMap<Integer, Double>();
+//            int currentDocId;
+//            String docIdSqlBase = "select term,tf from bodyterm where document_id = ";
+//            String insertSql = "insert into docVector values(?,?,?)";
+//            //PreparedStatement pstmt = conn.prepareStatement(docIdSql);
+//            PreparedStatement pstmt = conn.prepareStatement(insertSql);
+//            String term;
+//            int df;
+//            int tf;
+//            double tfidf;
+//            ResultSet rs2;
+//            for(int i = 0;i< DocNum;i++){ // 对每个文档先查询出他的所有词汇
+//            	currentDocId = docId.get(i); 
+//            	vector.clear();	
+//            	docIdSql = docIdSqlBase + currentDocId;
+//            	System.out.println(docIdSql);
+//            	rs = stmt.executeQuery(docIdSql);
+//            	int termId;
+//            	int countTerm =0;
+//            	while(rs.next()){ // 对该文档的每个词项，查询得到其 df值
+//            		countTerm ++;
+//            		term = rs.getString(1);
+//            		//docIdSql = "SELECT COUNT(distinct document_id) from bodyterm WHERE term = '" +term+"'";
+//            		docIdSql = "SELECT id,df from termId WHERE term = '" +term+"'";
+//            		//System.out.println(docIdSql);
+//            		rs2 = stmt2.executeQuery(docIdSql);
+//            		if(rs2.next()){
+//            			termId = rs2.getInt(1);
+//            			df = rs2.getInt(2);
+//                		tf = rs.getInt(2);
+//                		tfidf = (1+Math.log((double)tf))*(Math.log(DocNum/df));
+//                		if(tfidf > MIN_tfidf) 
+//                			vector.put(termId,tfidf);	
+//            		}      		
+//            	}
+//            	pstmt.setInt(1, currentDocId);
+//            	pstmt.setInt(2, countTerm);
+//            	//System.out.println(vector);
+//            	pstmt.setObject(3, vector);
+//            	//System.out.println(currentDocId + " :" +vector.toString());
+//            	pstmt.addBatch();
+//            }
+//            pstmt.executeBatch();
+//			conn.commit();
+//			System.out.println("ok");
+//            conn.close(); 
 //	}
-//	
-	//  向向量空间表格中插入 文档 对应的 向量
-	public static void buildDocVector() throws ClassNotFoundException, SQLException{
-		Connection conn = null;
-        String sql;
-        // MySQL的JDBC URL编写方式：jdbc:mysql://主机名称：连接端口/数据库的名称?参数=值
-        // 避免中文乱码要指定useUnicode和characterEncoding
-        // 执行数据库操作之前要在数据库管理系统上创建一个数据库，名字自己定，
-        // 下面语句之前就要先创建javademo数据库
-        String url = "jdbc:mysql://localhost:3306/ir_project?"+"user=root&password=qiang&useUnicode=true&characterEncoding=UTF8";
- 
-        
-            // 之所以要使用下面这条语句，是因为要使用MySQL的驱动，所以我们要把它驱动起来，
-            // 可以通过Class.forName把它加载进去，也可以通过初始化来驱动起来，下面三种形式都可以
-            Class.forName("com.mysql.jdbc.Driver") ;// 动态加载mysql驱动
- 
-            System.out.println("成功加载MySQL驱动程序");
-            conn = DriverManager.getConnection(url);
-            conn.setAutoCommit(false);  // 不自动提交
-            System.out.println("连接成功");
-            Statement stmt = conn.createStatement();
-            Statement stmt2 = conn.createStatement();
-            ResultSet rs;
-            // 首先获取文档id的范围 
-            ArrayList<Integer> docId = new ArrayList<Integer>();
-            String docIdSql = "select distinct document_id  from bodyterm ";
-            rs = stmt.executeQuery(docIdSql);
-            while(rs.next()){
-            	docId.add(rs.getInt(1)); // 获取所有的文档id
-            }
-            int DocNum = docId.size();  // 这里就是文档数量 N (1+Math.log((double)tf))*(Math.log(N/df));
-            
-            // 这里 先直接使用term，不转换为相应的id
-            HashMap<Integer, Double> vector  = new HashMap<Integer, Double>();
-            int currentDocId;
-            String docIdSqlBase = "select term,tf from bodyterm where document_id = ";
-            String insertSql = "insert into docVector values(?,?,?)";
-            //PreparedStatement pstmt = conn.prepareStatement(docIdSql);
-            PreparedStatement pstmt = conn.prepareStatement(insertSql);
-            String term;
-            int df;
-            int tf;
-            double tfidf;
-            ResultSet rs2;
-            for(int i = 0;i< DocNum;i++){ // 对每个文档先查询出他的所有词汇
-            	currentDocId = docId.get(i); 
-            	vector.clear();	
-            	docIdSql = docIdSqlBase + currentDocId;
-            	System.out.println(docIdSql);
-            	rs = stmt.executeQuery(docIdSql);
-            	int termId;
-            	int countTerm =0;
-            	while(rs.next()){ // 对该文档的每个词项，查询得到其 df值
-            		countTerm ++;
-            		term = rs.getString(1);
-            		//docIdSql = "SELECT COUNT(distinct document_id) from bodyterm WHERE term = '" +term+"'";
-            		docIdSql = "SELECT id,df from termId WHERE term = '" +term+"'";
-            		//System.out.println(docIdSql);
-            		rs2 = stmt2.executeQuery(docIdSql);
-            		if(rs2.next()){
-            			termId = rs2.getInt(1);
-            			df = rs2.getInt(2);
-                		tf = rs.getInt(2);
-                		tfidf = (1+Math.log((double)tf))*(Math.log(DocNum/df));
-                		if(tfidf > MIN_tfidf) 
-                			vector.put(termId,tfidf);	
-            		}      		
-            	}
-            	pstmt.setInt(1, currentDocId);
-            	pstmt.setInt(2, countTerm);
-            	//System.out.println(vector);
-            	pstmt.setObject(3, vector);
-            	//System.out.println(currentDocId + " :" +vector.toString());
-            	pstmt.addBatch();
-            }
-            pstmt.executeBatch();
-			conn.commit();
-			System.out.println("ok");
-            conn.close(); 
-	}
 	// 2014 12 12 构建词汇表改版
-	
+	// 给定向量进行归一化操作
+		public static HashMap<Integer, Double> normalize(HashMap<Integer, Double> vector){
+			if(vector == null) return null;
+			double length=0;
+			Set<Integer> keyS = vector.keySet();
+			Iterator<Integer> it = keyS.iterator();
+			int k;
+			while(it.hasNext()){
+				k = it.next();
+				length += Math.pow(vector.get(k),2);
+			}
+			length = Math.sqrt(length);
+			it = keyS.iterator();
+			//double test=0;
+			while(it.hasNext()){
+				k = it.next();
+				vector.put(k,vector.get(k)/length);
+				//test += Math.pow(vector.get(k),2);
+			}
+			//System.out.println(test);
+			return vector;
+		}
 	public static void insertTermID() throws ClassNotFoundException, SQLException{
 		Connection conn = null;
         String url = "jdbc:mysql://localhost:3306/ir_project?"+"user=root&password=qiang&useUnicode=true&characterEncoding=UTF8";

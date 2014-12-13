@@ -30,7 +30,7 @@ public class Clustering_GAAC {
 	 *  具体： N篇文档，计算两两相似度，放在一个二维数组中，簇中记录包含的文档的id就行了
 	 *  
 	 */
-	double sim_threshold = 0.05;
+	double sim_threshold = 0.08;
 	double TFIDF_THRESHOLD = 0.01;
 	ArrayList<Integer> doclist = new ArrayList<Integer>();
 	ArrayList<Double> docScoreList ;
@@ -39,7 +39,7 @@ public class Clustering_GAAC {
 		Clustering_GAAC build = new Clustering_GAAC();
 		ArrayList<Integer> doclist = new ArrayList<Integer>();
 		ArrayList<Double> docScoreList = new ArrayList<Double>();
-		for(int j =2;j<100;j++){
+		for(int j =2;j<1000;j++){
 			doclist.add(j*2);
 			docScoreList.add(Math.random()*10);
 		}
@@ -89,7 +89,11 @@ public class Clustering_GAAC {
 		@Override
 		public int compare(ClusterDetail o1, ClusterDetail o2) {
 			// TODO Auto-generated method stub
-			return (int)(o2.score - o1.score);
+			if(o2.score == o1.score){
+				return 0;
+			}else if(o2.score > o1.score){
+				return 1;
+			}else return -1;
 		}
 		
 	}
@@ -100,7 +104,11 @@ public class Clustering_GAAC {
 		public int compare(Integer o1, Integer o2) {
 			// TODO Auto-generated method stub
 //			System.out.println( o1 + "  " + o2);
-			return (int)(docScoreList.get(o2) - docScoreList.get(o1));
+			if(docScoreList.get(o2) == docScoreList.get(o1)){
+				return 0;
+			}else if(docScoreList.get(o2) > docScoreList.get(o1)){
+				return 1;
+			}else return -1;
 		}	
 	}
 	//  给聚好的簇排序，同时将簇内的文档按照其得分排序, 将文档id再重新映射回来
@@ -133,6 +141,7 @@ public class Clustering_GAAC {
 		public  ArrayList<ClusterDetail> cluster
 			(ArrayList<Integer> doclist,ArrayList<Double> docScoreList) 
 					throws ClassNotFoundException, SQLException{
+			System.out.println();
 			this.docScoreList = docScoreList;
 			// 输入的是文档集合是随机的，但是我们映射一下，在0位置上的就是文档 0对应的实际文档
 			if(result!=null) result.clear();
@@ -358,8 +367,11 @@ public class Clustering_GAAC {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}		
+	        	}else{  // 没有改文档
+	        		vectors.put(i,new HashMap<Integer, Double>());
 	        	}
 	        }
+	        System.out.println("Vectors size " + vectors.size());
 	        conn.close(); 
 			return true;
 		}
