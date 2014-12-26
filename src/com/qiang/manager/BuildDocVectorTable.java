@@ -47,11 +47,11 @@ import java.util.Set;
 		//part1-------------将bodyterm读入内存
 		
 		System.out.println("开始将bodyterm读入内存！");
-		int DocNum = 110000; // 文档总数目
+		int DocNum = 1000; // 文档总数目
 		int termSum = 13848493; // 13848493
 		for(long row=0; row<= termSum; row+=200000){
 			System.out.println(row);
-			String all_terms_sql = "select term,document_id,tf from bodyterm limit "+row+",200000";
+			String all_terms_sql = "select term,document_id,tf from bodyterm_1000 limit "+row+",200000";
 //			select * from bodyterm limit 100000,100000
 			ResultSet all_terms_rs = stmt.executeQuery(all_terms_sql);
 			int df;
@@ -97,7 +97,7 @@ import java.util.Set;
 	}
 	public void writeVectorIntoDatabase() throws SQLException{
 		  Connection conn = ConnectionUtil.getConnection();
-	      String insertSql = "insert into docVector values(?,?,?)";
+	      String insertSql = "insert into docVector_1000 values(?,?,?)";
 	      //PreparedStatement pstmt = conn.prepareStatement(docIdSql);
 	      PreparedStatement pstmt = conn.prepareStatement(insertSql);
 	      Set<Integer> keyset = bigVectorMap.keySet();
@@ -140,7 +140,7 @@ import java.util.Set;
 		Connection conn = ConnectionUtil.getConnection();
 		System.out.println("开始将term读入内存！");
 		Statement stmt = conn.createStatement();
-		String sql = "select termid,term,df from termid";
+		String sql = "select termid,term,df from term_id_1000";
 		ResultSet rs =  stmt.executeQuery(sql);
 		
 		while(rs.next()){
